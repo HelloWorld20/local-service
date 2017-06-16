@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>Document</title>
+</head>
+<body>
+
+<h1>upload Page!</h1>
+
+<!-- <form enctype="multipart/form-data" method="POST"> -->
+    <!-- IE9及以下浏览器无法实现accept属性筛选文件类型，accept是html5属性 -->
+	<input id="file1" type="file" name="file1">
+    <br>
+    <input id="file2" type="file" name="file2" accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" multiple="multiple">
+    <br>
+    <input id="file3" type="file" name="file2" accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" multiple="multiple">
+    <br>
+	<input id="text" type="text" value="test text">
+    <br>
+    <div id="drag" style="width:200px;height: 100px;border:1px solid gray;">拖拽，打印信息</div>
+    <hr>
+	<input id="submit" type="submit" value="submit form">
+<!-- </form> -->
+<br>
+<progress value="0" min="0" max="100"></progress>
+
+<p>
+有目前一下问题：
+<br>
+1、form提交无法提交单个input包含多个文件<br>
+2、form提交不太好做回调<br>
+3、form提交无法做进度条<br>
+4、ajax提交无法兼容IE10以下浏览器<br>
+</p>
+
+<script src="http://cdn.bootcss.com/jquery/1.11.1/jquery.min.js"></script>
+<!-- <script src="http://cdn.bootcss.com/xlsx/0.9.7/xlsx.core.min.js"></script> -->
+
+
+<script type="text/javascript">
+(function(win, doc, $) {
+
+win.upload = function(opt) {
+    var url = opt.url || 'http://192.168.22.161:3000/upload'
+    var data = opt.data || {};
+    var formSelector = opt.formSelector || "";
+    var progress = opt.progress || function() {}
+
+    if(!!window.FormData) {
+
+        var formData = new FormData();
+        
+        Object.keys(data).forEach(function(v, i) {
+            if(data[v]) formData.append(v, data[v])
+        })
+        $.ajax({
+            url: url,
+            method: "POST",
+            data: formData,
+            processData: false,     //必须是false, 不然会被转换成字符串。
+            contentType: false,     //必须是false
+            //xhr (默认: 当可用的ActiveXObject（IE）中，否则为XMLHttpRequest)
+            // 类型: Function()
+            // 回调创建XMLHttpRequest对象。当可用时默认为ActiveXObject（IE）中，否则为XMLHttpRequest。提供覆盖你自己的执行的XMLHttpRequest或增强工厂。
+            xhr: function(e) {
+                var myXhr = $.ajaxSettings.xhr();
+                console.log(myXhr)
+                if(myXhr.upload) {
+                    myXhr.upload.onprogress = function(e) {
+                        if (e.lengthComputable) {
+                            //这个是总进度，多个文件的总进度。
+                            progress(e.loaded, e.total, myXhr)
+                        }
+                    }
+                }
+                //一定要return xhr对象，否则不会上传
+                return myXhr
+            },
+            success: function(res){
+                console.log(res)
+            }
+        });
+
+        // });
+    } else {
+        console.warn('不支持ajax异步上传文件，请使用IE10以上版本或者其他高级浏览器操作');
+        // $(formSelector).on('submit', function(e) {
+        //     var timeStamp = new Data().getTime();
+        //     var id = 'uploader-frame' + timeStamp
+        //     var iframe = $("<iframe id=" + id + " name=" + id + " style='display:none;'></iframe>")
+        //     $(formSelector).append(iframe).attr({
+        //         target: id,
+        //         action: url
+        //     })
+        // })
+    }
+}
+
+})(window, document, jQuery);
+
+//初始化拖拽方法。只是要获取文件路径不需要readFile API
+function initDrag( selector, callback ) {
+    
+    let $elem = $(selector);
+    $elem.counter = 0;
+
+    $(selector).on('dragenter', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        $elem.counter++;
+        $elem.addClass( 'highLight' )
+    })
+
+    $(selector).on('dragleave', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        //修正拖拽方法进入子元素时也会出发dragleave事件的方法
+        $elem.counter--;
+        if($elem.counter === 0) {
+            $elem.removeClass( 'highLight' )           
+        }
+    })
+
+    $(selector).on('dragover', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+    })
+
+    $(selector).on('drop', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        $elem.counter--;
+        if($elem.counter === 0) {
+            $elem.removeClass( 'highLight' )
+        }
+        if($.isFunction(callback)) callback(e);
+    })
+    
+}
+
+
+</script>
+
+<script type="text/javascript">
+
+$("#submit").on('click', function() {
+
+    upload({
+        url: 'http://192.168.22.161:3000/upload',
+        data: {
+            file1: $("#file1")[0].files[0],                 // 是$("#file")[0].files[0]， 不是$("#file")[0].files；
+            file2: $("#file2")[0].files[0],
+            text: $("#text").val()
+        },
+        // formSelector: 'form',
+        progress: function(loaded, total) {
+            $("progress").val(loaded / total * 100)
+        }
+    })
+})
+
+initDrag('#drag', function(e) {
+    console.log(e.originalEvent.dataTransfer.files)
+})
+// 
+// 解析Excel文件
+// var rABS = true;
+// $("#file2").on('change', function(e) {
+//     var file = e.target.files[0]
+//     var reader = new FileReader();
+
+//     reader.onload = function(event) {
+//         var data = event.target.result;
+
+//         var workbook;
+//         if(rABS) {
+//             /* if binary string, read with type 'binary' */
+//             workbook = XLSX.read(data, {type: 'binary'});
+//             console.log('rABS',workbook)
+//         } else {
+//             /* if array buffer, convert to base64 */
+//             var arr = fixdata(data);
+//             workbook = XLSX.read(btoa(arr), {type: 'base64'});
+//             console.log('no_rABS',workbook)
+//         }
+//     }
+//     reader.readAsBinaryString(file);
+// })
+
+</script>
+</body>
+</html>
